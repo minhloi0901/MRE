@@ -28,7 +28,10 @@ if __name__ == "__main__":
 
     trainer = Trainer(cfg)
     early_stopping = EarlyStopping(patience=cfg.earlystop_epoch, delta=-0.001, verbose=True)
+    
     for epoch in range(cfg.nepoch):
+        # current epoch
+        log.write("epoch ", epoch)
         epoch_start_time = time.time()
         iter_data_time = time.time()
         epoch_iter = 0
@@ -57,6 +60,9 @@ if __name__ == "__main__":
             trainer.save_networks(epoch)
 
         # Validation
+        log.write(f"End of epoch {epoch} / {cfg.nepoch} \t Time Taken: {time.time() - epoch_start_time} sec\n")
+
+        log.write("Validation...\n")
         trainer.eval()
         val_results = validate(trainer.model, val_cfg)
         val_writer.add_scalar("AP", val_results["AP"], trainer.total_steps)

@@ -43,12 +43,12 @@ class DefaultConfigs(ABC):
     optim = "adam"
     new_optim = False
     loss_freq = 400
-    save_latest_freq = 2000
-    save_epoch_freq = 20
+    save_latest_freq = 1000
+    save_epoch_freq = 10
     continue_train = False
     epoch_count = 1
     last_epoch = -1
-    nepoch = 400
+    nepoch = 200
     beta1 = 0.9
     lr = 0.0001
     init_type = "normal"
