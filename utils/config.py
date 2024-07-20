@@ -42,7 +42,7 @@ class DefaultConfigs(ABC):
     earlystop_epoch = 5
     optim = "adam"
     new_optim = False
-    loss_freq = 400
+    loss_freq = 100
     save_latest_freq = 1000
     save_epoch_freq = 10
     continue_train = False

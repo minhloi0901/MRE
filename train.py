@@ -43,10 +43,11 @@ if __name__ == "__main__":
             trainer.set_input(data)
             trainer.optimize_parameters()
 
-            # if trainer.total_steps % cfg.loss_freq == 0:
-            #     log.write(f"Train loss: {trainer.loss} at step: {trainer.total_steps}\n")
+            if trainer.total_steps % cfg.loss_freq == 0:
+                log.write(f"Train loss: {trainer.loss} at step: {trainer.total_steps}\n")
+                
             train_writer.add_scalar("loss", trainer.loss, trainer.total_steps)
-
+            
             if trainer.total_steps % cfg.save_latest_freq == 0:
                 log.write(
                     "saving the latest model %s (epoch %d, model.total_steps %d)\n"
