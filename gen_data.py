@@ -1,10 +1,13 @@
 import os
 from argparse import ArgumentParser
 
+from tqdm import tqdm
 import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from diffusers.pipelines.auto_pipeline import AutoPipelineForInpainting
+from datasets import load_dataset
+from huggingface_hub import login
 
 from PIL import Image
 
@@ -22,11 +25,35 @@ def create_args():
     parser.add_argument(
         "--seed", type=int, default=0, help="Seed used for Generator"
     )
+    parser.add_argument(
+        "--hf-token", type=str, default=None, help="Hugging face access token"
+    )
 
     # Datasets
     parser.add_argument(
+        "--num-samples",
+        type=int,
+        required=True,
+        help="Number of samples in dataset to download for each labels",
+    )
+    parser.add_argument(
         "--root", type=str, required=True, help="Path to initial dataset"
     )
+    parser.add_argument(
+        "--real-dir",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Path to real dataset",
+    )
+    parser.add_argument(
+        "--fake-dir",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Path to fake dataset",
+    )
+
     parser.add_argument(
         "--image-size",
         type=int,
@@ -51,6 +78,10 @@ def create_args():
         type=str,
         default="runwayml/stable-diffusion-inpainting",
         help="Diffuser to used",
+    )
+    parser.add_argument(
+        "--float16",
+        action="store_true",
     )
 
     # MRE
@@ -129,7 +160,38 @@ def compute_MRE(
 
 
 def main(args):
+    if args.hf_token:
+        login(token=args.hf_token)
     args.device = torch.device(args.device)
+
+    if args.real_dir:
+        hf_dataset = load_dataset(
+            *args.real_dir,
+            split="train",
+            streaming=True,
+            trust_remote_code=True,
+        )
+        hf_iter = iter(hf_dataset)
+        os.makedirs(os.path.join(args.root, "reals"), exist_ok=True)
+        for i in tqdm(range(args.num_samples), desc="Downloading real dataset"):
+            r = next(hf_iter)
+            os.makedirs(os.path.join(args.root, "reals"), exist_ok=True)
+            r["image"].save(os.path.join(args.root, "reals", f"{i}.png"))
+
+    if args.fake_dir:
+        hf_dataset = load_dataset(
+            *args.fake_dir,
+            split="train",
+            streaming=True,
+            trust_remote_code=True,
+        )
+        hf_iter = iter(hf_dataset)
+        os.makedirs(os.path.join(args.root, "fakes"), exist_ok=True)
+
+        for i in tqdm(range(args.num_samples), desc="Downloading fake dataset"):
+            r = next(hf_iter)
+            r["image"].save(os.path.join(args.root, "fakes", f"{i}.png"))
+
 
     transform = transforms.Compose(
         [
