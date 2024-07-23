@@ -1,0 +1,188 @@
+import os
+from argparse import ArgumentParser
+
+import torch
+from torchvision import transforms
+from torch.utils.data import DataLoader
+from diffusers.pipelines.auto_pipeline import AutoPipelineForInpainting
+
+from PIL import Image
+
+from dataset import ImageDataset
+
+
+def create_args():
+    parser = ArgumentParser()
+
+    parser.add_argument(
+        "--device",
+        choices=["cuda", "cpu"],
+        default="cpu",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=0, help="Seed used for Generator"
+    )
+
+    # Datasets
+    parser.add_argument(
+        "--root", type=str, required=True, help="Path to initial dataset"
+    )
+    parser.add_argument(
+        "--image-size",
+        type=int,
+        nargs="+",
+        default=[512, 512],
+        help="Size of images",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+    )
+    parser.add_argument(
+        "--pin-memory",
+        action="store_true",
+    )
+    parser.add_argument("--num-workers", type=int, default=1)
+
+    # Diffuser
+    parser.add_argument(
+        "--diffuser",
+        type=str,
+        default="runwayml/stable-diffusion-inpainting",
+        help="Diffuser to used",
+    )
+
+    # MRE
+    parser.add_argument(
+        "--save-dir", type=str, required=True, help="Where to save"
+    )
+    parser.add_argument(
+        "--num-masks", type=int, default=2, help="Number of masks"
+    )
+    parser.add_argument(
+        "--blur-factor",
+        type=float,
+        default=0,
+        help="Blur factor used for blurring masks",
+    )
+    parser.add_argument(
+        "--patch-size",
+        type=int,
+        nargs="+",
+        default=[64, 64],
+        help="Size of patch used for computing MRE",
+    )
+    return parser.parse_args()
+
+
+# MRE = masked restoration error
+
+
+def compute_MRE(
+    pipeline,
+    init_images: torch.Tensor,
+    device: torch.device,
+    num_masks: int,
+    blur_factor: float,
+    image_size=(512, 512),
+    patch_size=(64, 64),
+    seed: int = 0,
+):
+    rng = torch.Generator(device).manual_seed(seed)
+    masks = [torch.zeros(image_size) for _ in range(num_masks)]
+
+    patch_dims = (
+        (image_size[0] + patch_size[0] - 1) // patch_size[0],
+        (image_size[1] + patch_size[1] - 1) // patch_size[1],
+    )
+    ids_per_mask = (patch_dims[0] * patch_dims[1] + num_masks - 1) // num_masks
+
+    ids = torch.randperm(patch_dims[0] * patch_dims[1], generator=rng)
+
+    for ptr, id in enumerate(ids):
+        k = ptr // ids_per_mask
+
+        patch_x = id // patch_dims[1]
+        patch_y = id % patch_dims[1]
+        for i in range(patch_x * patch_size[0], (patch_x + 1) * patch_size[0]):
+            for j in range(
+                patch_y * patch_size[1], (patch_y + 1) * patch_size[1]
+            ):
+                if i < patch_size[0] and j < patch_size[1]:
+                    masks[k][i, j] = 255
+
+    blurred_masks = []
+    for k in range(num_masks):
+        mask = Image.fromarray(masks[k].numpy())
+        mask = pipeline.mask_processor.blur(mask, blur_factor=blur_factor)
+
+        blurred_masks.append(mask)
+
+    images = init_images.clone()
+    for mask in blurred_masks:
+        images = pipeline(
+            prompt="", image=images, mask_image=mask, generator=rng
+        ).images[0]
+
+    return torch.abs(images - init_images)
+
+
+def main(args):
+    args.device = torch.device(args.device)
+
+    transform = transforms.Compose(
+        [
+            transforms.PILToTensor(),
+            transforms.Resize(args.image_size),
+        ]
+    )
+    dataset = ImageDataset(root=args.root, transform=transform)
+
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        drop_last=False,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_memory,
+    )
+
+    if args.float16:
+        pipeline = AutoPipelineForInpainting.from_pretrained(
+            args.diffuser, torch_dtype=torch.float16, variant="fp16"
+        ).to(args.device)
+    else:
+        pipeline = AutoPipelineForInpainting.from_pretrained(args.diffuser).to(
+            args.device
+        )
+
+    os.makedirs(args.save_dir, exist_ok=True)
+    cnt = 0
+    for images, labels in dataloader:
+        images = images.to(args.device)
+        mre_images = compute_MRE(
+            pipeline=pipeline,
+            init_images=images,
+            device=args.device,
+            num_masks=args.num_masks,
+            blur_factor=args.blur_factor,
+            patch_size=args.patch_size,
+            seed=args.seed,
+        )
+        mre_images = mre_images.type(torch.uint8)
+        for i in range(len(labels)):
+            label_dir = os.path.join(args.save_dir, dataset.classes[labels[i]])
+
+            os.makedirs(
+                label_dir,
+                exist_ok=True,
+            )
+            pil_image = Image.fromarray(mre_images[i].numpy())
+            pil_image.save(os.path.join(label_dir, f"{cnt}.png"))
+            cnt += 1
+
+
+if __name__ == "__main__":
+    args = create_args()
+    main(args)
