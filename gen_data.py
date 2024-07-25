@@ -123,7 +123,7 @@ def compute_MRE(
     image_size = (init_images.size(2), init_images.size(3))
     rng = torch.Generator(device).manual_seed(seed)
     masks = [
-        [torch.zeros(image_size) for _ in range(N)] for _ in range(num_masks)
+        [torch.zeros(image_size, dtype=torch.uint8) for _ in range(N)] for _ in range(num_masks)
     ]
 
     patch_dims = (
@@ -133,7 +133,9 @@ def compute_MRE(
     ids_per_mask = (patch_dims[0] * patch_dims[1] + num_masks - 1) // num_masks
     s = set()
     for b in range(N):
-        ids = torch.randperm(patch_dims[0] * patch_dims[1], generator=rng, device=device)
+        ids = torch.randperm(
+            patch_dims[0] * patch_dims[1], generator=rng, device=device
+        )
 
         for ptr, id in enumerate(ids):
             k = ptr // ids_per_mask
@@ -150,9 +152,7 @@ def compute_MRE(
                         s.add((k, b))
                         masks[k][b][i, j] = 255
 
-    blurred_masks = [
-        [None for _ in range(N)] for _ in range(num_masks)
-    ]
+    blurred_masks = [[None for _ in range(N)] for _ in range(num_masks)]
     for k in range(num_masks):
         for b in range(N):
             mask = Image.fromarray(masks[k][b].numpy())
@@ -163,7 +163,10 @@ def compute_MRE(
     images = init_images.clone()
     for mask in blurred_masks:
         images = pipeline(
-            prompt=["" for _ in range(N)], image=images, mask_image=mask, generator=rng
+            prompt=["" for _ in range(N)],
+            image=images,
+            mask_image=mask,
+            generator=rng,
         ).images
 
     return torch.abs(images - init_images)
