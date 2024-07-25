@@ -173,14 +173,14 @@ def compute_MRE(
 
     images = init_images.clone()
     for mask in blurred_masks:
-        images = transforms.PILToTensor()(
-            pipeline(
-                prompt=["" for _ in range(N)],
-                image=images,
-                mask_image=mask,
-                generator=rng,
-            ).images
-        ).to(device)
+        tmp = pipeline(
+            prompt=["" for _ in range(N)],
+            image=images,
+            mask_image=mask,
+            generator=rng,
+        ).images
+        for i in range(len(tmp)):
+            images[i] = transforms.ToTensor()(tmp[i])
 
     return torch.abs(images - init_images)
 
