@@ -259,7 +259,7 @@ def main(args):
         )
 
         for i in range(len(labels)):
-            label_dir = os.path.join(args.save_dir, dataset.classes[labels[i]])
+            label_dir = os.path.join(args.save_dir, dataset.classes[labels[i].item()])
 
             os.makedirs(
                 label_dir,
