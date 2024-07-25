@@ -116,45 +116,55 @@ def compute_MRE(
     device: torch.device,
     num_masks: int,
     blur_factor: float,
-    image_size=(512, 512),
     patch_size=(64, 64),
     seed: int = 0,
 ):
+    N, C, W, H = init_images.size()
+    image_size = (init_images.size(2), init_images.size(3))
     rng = torch.Generator(device).manual_seed(seed)
-    masks = [torch.zeros(image_size) for _ in range(num_masks)]
+    masks = [
+        [torch.zeros(image_size) for _ in range(N)] for _ in range(num_masks)
+    ]
 
     patch_dims = (
         (image_size[0] + patch_size[0] - 1) // patch_size[0],
         (image_size[1] + patch_size[1] - 1) // patch_size[1],
     )
     ids_per_mask = (patch_dims[0] * patch_dims[1] + num_masks - 1) // num_masks
+    s = set()
+    for b in range(N):
+        ids = torch.randperm(patch_dims[0] * patch_dims[1], generator=rng)
 
-    ids = torch.randperm(patch_dims[0] * patch_dims[1], generator=rng)
+        for ptr, id in enumerate(ids):
+            k = ptr // ids_per_mask
 
-    for ptr, id in enumerate(ids):
-        k = ptr // ids_per_mask
-
-        patch_x = id // patch_dims[1]
-        patch_y = id % patch_dims[1]
-        for i in range(patch_x * patch_size[0], (patch_x + 1) * patch_size[0]):
-            for j in range(
-                patch_y * patch_size[1], (patch_y + 1) * patch_size[1]
+            patch_x = id // patch_dims[1]
+            patch_y = id % patch_dims[1]
+            for i in range(
+                patch_x * patch_size[0], (patch_x + 1) * patch_size[0]
             ):
-                if i < patch_size[0] and j < patch_size[1]:
-                    masks[k][i, j] = 255
+                for j in range(
+                    patch_y * patch_size[1], (patch_y + 1) * patch_size[1]
+                ):
+                    if i < image_size[0] and j < image_size[1]:
+                        s.add((k, b))
+                        masks[k][b][i, j] = 255
 
-    blurred_masks = []
+    blurred_masks = [
+        [None for _ in range(N)] for _ in range(num_masks)
+    ]
     for k in range(num_masks):
-        mask = Image.fromarray(masks[k].numpy())
-        mask = pipeline.mask_processor.blur(mask, blur_factor=blur_factor)
-
-        blurred_masks.append(mask)
+        for b in range(N):
+            mask = Image.fromarray(masks[k][b].numpy())
+            blurred_masks[k][b] = pipeline.mask_processor.blur(
+                mask, blur_factor=blur_factor
+            )
 
     images = init_images.clone()
     for mask in blurred_masks:
         images = pipeline(
-            prompt="", image=images, mask_image=mask, generator=rng
-        ).images[0]
+            prompt=["" for _ in range(N)], image=images, mask_image=mask, generator=rng
+        ).images
 
     return torch.abs(images - init_images)
 
@@ -191,7 +201,6 @@ def main(args):
         for i in tqdm(range(args.num_samples), desc="Downloading fake dataset"):
             r = next(hf_iter)
             r["image"].save(os.path.join(args.root, "fakes", f"{i}.png"))
-
 
     transform = transforms.Compose(
         [
