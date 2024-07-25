@@ -122,10 +122,6 @@ def compute_MRE(
     N, C, W, H = init_images.size()
     image_size = (init_images.size(2), init_images.size(3))
     rng = torch.Generator(device).manual_seed(seed)
-    masks = [
-        [torch.zeros(image_size, dtype=torch.uint8) for _ in range(N)]
-        for _ in range(num_masks)
-    ]
 
     patch_dims = (
         (image_size[0] + patch_size[0] - 1) // patch_size[0],
@@ -133,42 +129,58 @@ def compute_MRE(
     )
     ids_per_mask = (patch_dims[0] * patch_dims[1] + num_masks - 1) // num_masks
     s = set()
-    for b in range(N):
-        ids = torch.randperm(
-            patch_dims[0] * patch_dims[1], generator=rng, device=device
-        )
-
-        for ptr, id in enumerate(ids):
-            k = ptr // ids_per_mask
-
-            patch_x = id // patch_dims[1]
-            patch_y = id % patch_dims[1]
-            for i in range(
-                patch_x * patch_size[0], (patch_x + 1) * patch_size[0]
-            ):
-                for j in range(
-                    patch_y * patch_size[1], (patch_y + 1) * patch_size[1]
-                ):
-                    if i < image_size[0] and j < image_size[1]:
-                        s.add((k, b))
-                        masks[k][b][i, j] = 255
+    # masks = [
+    #     [torch.zeros(image_size, dtype=torch.uint8) for _ in range(N)]
+    #     for _ in range(num_masks)
+    # ]
+    # for b in range(N):
+    #     ids = torch.randperm(
+    #         patch_dims[0] * patch_dims[1], generator=rng, device=device
+    #     )
+    #
+    #     for ptr, id in enumerate(ids):
+    #         k = ptr // ids_per_mask
+    #
+    #         patch_x = id // patch_dims[1]
+    #         patch_y = id % patch_dims[1]
+    #         for i in range(
+    #             patch_x * patch_size[0], (patch_x + 1) * patch_size[0]
+    #         ):
+    #             for j in range(
+    #                 patch_y * patch_size[1], (patch_y + 1) * patch_size[1]
+    #             ):
+    #                 if i < image_size[0] and j < image_size[1]:
+    #                     s.add((k, b))
+    #                     masks[k][b][i, j] = 255
+    alter_mask = torch.zeros((2, *image_size), device=device)
+    for i in range(image_size[0]):
+        for j in range(image_size[1]):
+            patch_x = i // patch_size[0]
+            patch_y = j // patch_size[1]
+            if (patch_x + patch_y) % 2:
+                alter_mask[0, i, j] = 1
+            else:
+                alter_mask[1, i, j] = 1
+    masks = alter_mask[:, None, :, :].repeat((N, 1, 1, 1))
 
     blurred_masks = [[None for _ in range(N)] for _ in range(num_masks)]
     for k in range(num_masks):
         for b in range(N):
-            mask = Image.fromarray(masks[k][b].numpy())
-            blurred_masks[k][b] = transforms.PILToTensor()(
+            mask = transforms.ToPILImage()(masks[k][b])
+            blurred_masks[k][b] = transforms.ToTensor()(
                 pipeline.mask_processor.blur(mask, blur_factor=blur_factor)
             ).to(device)
 
     images = init_images.clone()
     for mask in blurred_masks:
-        images = pipeline(
-            prompt=["" for _ in range(N)],
-            image=images,
-            mask_image=mask,
-            generator=rng,
-        ).images
+        images = transforms.PILToTensor()(
+            pipeline(
+                prompt=["" for _ in range(N)],
+                image=images,
+                mask_image=mask,
+                generator=rng,
+            ).images
+        ).to(device)
 
     return torch.abs(images - init_images)
 
@@ -245,7 +257,7 @@ def main(args):
             patch_size=args.patch_size,
             seed=args.seed,
         )
-        mre_images = mre_images.type(torch.uint8)
+        mre_images = transforms.ToPILImage()(mre_images)
         for i in range(len(labels)):
             label_dir = os.path.join(args.save_dir, dataset.classes[labels[i]])
 
@@ -253,7 +265,7 @@ def main(args):
                 label_dir,
                 exist_ok=True,
             )
-            pil_image = Image.fromarray(mre_images[i].numpy())
+            pil_image = mre_images[i]
             pil_image.save(os.path.join(label_dir, f"{cnt}.png"))
             cnt += 1
 
