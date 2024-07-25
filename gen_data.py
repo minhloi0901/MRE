@@ -133,7 +133,7 @@ def compute_MRE(
     ids_per_mask = (patch_dims[0] * patch_dims[1] + num_masks - 1) // num_masks
     s = set()
     for b in range(N):
-        ids = torch.randperm(patch_dims[0] * patch_dims[1], generator=rng)
+        ids = torch.randperm(patch_dims[0] * patch_dims[1], generator=rng, device=device)
 
         for ptr, id in enumerate(ids):
             k = ptr // ids_per_mask
