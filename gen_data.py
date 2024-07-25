@@ -257,7 +257,7 @@ def main(args):
             patch_size=args.patch_size,
             seed=args.seed,
         )
-        mre_images = transforms.ToPILImage()(mre_images)
+
         for i in range(len(labels)):
             label_dir = os.path.join(args.save_dir, dataset.classes[labels[i]])
 
@@ -265,7 +265,7 @@ def main(args):
                 label_dir,
                 exist_ok=True,
             )
-            pil_image = mre_images[i]
+            pil_image = transforms.ToPILImage()(mre_images[i])
             pil_image.save(os.path.join(label_dir, f"{cnt}.png"))
             cnt += 1
 
