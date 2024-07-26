@@ -7,6 +7,10 @@ from transformers import AutoImageProcessor, AutoModelForImageClassification, Tr
 from evaluate import load as load_metric
 from PIL import Image
 from sklearn.model_selection import train_test_split
+import wandb
+
+# Disable wandb
+wandb.init(mode="disabled")
 
 class CustomDataset(TorchDataset):
     def __init__(self, images, processor):

@@ -10,3 +10,4 @@ gradio
 datasets==2.20.0
 scikit-learn
 evaluate
+wandb
