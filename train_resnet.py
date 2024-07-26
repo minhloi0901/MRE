@@ -20,6 +20,8 @@ class CustomDataset(TorchDataset):
         img = self.images[idx]['image']
         label = self.images[idx]['label']
         inputs = self.processor(images=img, return_tensors='pt')
+        # Remove extra dimensions and convert tensor to the appropriate shape
+        inputs = {key: val.squeeze(0) for key, val in inputs.items()}
         return {**inputs, 'label': torch.tensor(label)}
 
 def create_args():
@@ -38,7 +40,6 @@ def create_args():
         "--dataset", type=str, required=True, help="Path to initial dataset"
     )
 
-   
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -76,7 +77,7 @@ def main(args):
     
     all_images = real_images + fake_images
 
-    # Split dataset with 82% for training and 18% for testing
+    # Split dataset with 80% for training and 20% for testing
     train_images, test_images = train_test_split(all_images, test_size=0.2, random_state=args.seed)
 
     processor = AutoImageProcessor.from_pretrained('microsoft/resnet-50', trust_remote_code=True)
@@ -85,22 +86,16 @@ def main(args):
     train_dataset = CustomDataset(train_images, processor)
     test_dataset = CustomDataset(test_images, processor)
 
-    def collate_fn(batch):
-        inputs = {key: torch.cat([item[key] for item in batch], dim=0) for key in batch[0] if key != 'label'}
-        inputs['label'] = torch.stack([item['label'] for item in batch])
-        return inputs
-
     def compute_metrics(p):
         accuracy = load_metric("accuracy")
         return accuracy.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
 
-    # Ensure the output directory exists
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
     training_args = TrainingArguments(
         output_dir=args.save_dir,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         per_device_train_batch_size=args.batch_size,
         num_train_epochs=args.num_epochs,
         save_steps=10_000,
@@ -115,22 +110,17 @@ def main(args):
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
-        data_collator=collate_fn,
         compute_metrics=compute_metrics
     )
 
-    # Train the model
     trainer.train()
 
-    # Save the trained model
     model_save_path = os.path.join(args.save_dir, "model")
     model.save_pretrained(model_save_path)
     processor.save_pretrained(model_save_path)
 
-    # Evaluate the model on the test set
     results = trainer.evaluate(eval_dataset=test_dataset)
 
-    # Save evaluation results
     with open(os.path.join(args.save_dir, "test_results.txt"), "w") as writer:
         for key, value in results.items():
             writer.write(f"{key}: {value}\n")
