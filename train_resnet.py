@@ -108,6 +108,11 @@ def main(args):
         seed=args.seed,
         logging_dir=os.path.join(args.save_dir, 'logs'),  # Directory for logs
         logging_steps=500,  # Log every 500 steps
+        learning_rate=5e-5,  # Start with a smaller learning rate
+        lr_scheduler_type="cosine",  # Use a cosine scheduler
+        load_best_model_at_end=True,  # Load the best model at the end
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
     )
 
     trainer = Trainer(
