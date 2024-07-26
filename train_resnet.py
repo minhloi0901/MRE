@@ -85,9 +85,6 @@ def main(args):
     train_dataset = CustomDataset(train_images, processor)
     test_dataset = CustomDataset(test_images, processor)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=args.pin_memory, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=args.pin_memory, shuffle=False)
-
     def collate_fn(batch):
         inputs = {key: torch.cat([item[key] for item in batch], dim=0) for key in batch[0] if key != 'label'}
         inputs['label'] = torch.stack([item['label'] for item in batch])
