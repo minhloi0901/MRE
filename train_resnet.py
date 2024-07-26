@@ -2,11 +2,25 @@ import os
 import numpy as np
 from argparse import ArgumentParser
 import torch
+from torch.utils.data import DataLoader, Dataset as TorchDataset
 from transformers import AutoImageProcessor, AutoModelForImageClassification, TrainingArguments, Trainer
-from datasets import Dataset, DatasetDict
 from evaluate import load as load_metric
 from PIL import Image
 from sklearn.model_selection import train_test_split
+
+class CustomDataset(TorchDataset):
+    def __init__(self, images, processor):
+        self.images = images
+        self.processor = processor
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        img = self.images[idx]['image']
+        label = self.images[idx]['label']
+        inputs = self.processor(images=img, return_tensors='pt')
+        return {**inputs, 'label': torch.tensor(label)}
 
 def create_args():
     parser = ArgumentParser()
@@ -19,34 +33,20 @@ def create_args():
     parser.add_argument(
         "--seed", type=int, default=0, help="Seed used for training"
     )
-    parser.add_argument(
-        "--hf-token", type=str, default=None, help="Hugging face access token"
-    )
 
     parser.add_argument(
         "--dataset", type=str, required=True, help="Path to initial dataset"
     )
 
-    parser.add_argument(
-        "--image-size",
-        type=int,
-        nargs=2,
-        default=[512, 512],
-        help="Size of images",
-    )
+   
     parser.add_argument(
         "--batch-size",
         type=int,
         default=32,
     )
+   
     parser.add_argument(
-        "--pin-memory",
-        action="store_true",
-    )
-    parser.add_argument("--num-workers", type=int, default=1)
-
-    parser.add_argument(
-        "--save-dir", type=str, required=True, help="Where to save the model"
+        "--save-dir", type=str, required=True, help="Where to save the model and logs"
     )
     parser.add_argument(
         "--num-epochs", type=int, default=5, help="Number of epochs"
@@ -79,61 +79,61 @@ def main(args):
     # Split dataset with 82% for training and 18% for testing
     train_images, test_images = train_test_split(all_images, test_size=0.2, random_state=args.seed)
 
-    # Convert to Dataset
-    train_dataset = Dataset.from_dict({
-        'image': [img['image'] for img in train_images],
-        'label': [img['label'] for img in train_images],
-    })
-
-    test_dataset = Dataset.from_dict({
-        'image': [img['image'] for img in test_images],
-        'label': [img['label'] for img in test_images],
-    })
-
-    dataset = DatasetDict({
-        'train': train_dataset,
-        'test': test_dataset
-    })
-
     processor = AutoImageProcessor.from_pretrained('microsoft/resnet-50', trust_remote_code=True)
     model = AutoModelForImageClassification.from_pretrained('microsoft/resnet-50', num_labels=2, ignore_mismatched_sizes=True, trust_remote_code=True)
 
-    def transform(example_batch):
-        inputs = processor(images=example_batch['image'], return_tensors='pt')
-        inputs['label'] = torch.tensor(example_batch['label'])
+    train_dataset = CustomDataset(train_images, processor)
+    test_dataset = CustomDataset(test_images, processor)
+
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=args.pin_memory, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=args.pin_memory, shuffle=False)
+
+    def collate_fn(batch):
+        inputs = {key: torch.cat([item[key] for item in batch], dim=0) for key in batch[0] if key != 'label'}
+        inputs['label'] = torch.stack([item['label'] for item in batch])
         return inputs
 
-    dataset = dataset.map(transform, batched=True)
-
-    accuracy = load_metric("accuracy")
-
     def compute_metrics(p):
+        accuracy = load_metric("accuracy")
         return accuracy.compute(predictions=np.argmax(p.predictions, axis=1), references=p.label_ids)
+
+    # Ensure the output directory exists
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
 
     training_args = TrainingArguments(
         output_dir=args.save_dir,
-        eval_strategy="epoch",  # Thay đổi từ evaluation_strategy thành eval_strategy
+        evaluation_strategy="epoch",
         per_device_train_batch_size=args.batch_size,
         num_train_epochs=args.num_epochs,
         save_steps=10_000,
         save_total_limit=2,
-        seed=args.seed
+        seed=args.seed,
+        logging_dir=os.path.join(args.save_dir, 'logs'),  # Directory for logs
+        logging_steps=500,  # Log every 500 steps
     )
 
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=dataset['train'],
-        eval_dataset=dataset['test'],
+        train_dataset=train_dataset,
+        eval_dataset=test_dataset,
+        data_collator=collate_fn,
         compute_metrics=compute_metrics
     )
 
+    # Train the model
     trainer.train()
 
-    # Đánh giá mô hình trên tập test
-    results = trainer.evaluate(eval_dataset=dataset['test'])
+    # Save the trained model
+    model_save_path = os.path.join(args.save_dir, "model")
+    model.save_pretrained(model_save_path)
+    processor.save_pretrained(model_save_path)
 
-    # Lưu kết quả đánh giá
+    # Evaluate the model on the test set
+    results = trainer.evaluate(eval_dataset=test_dataset)
+
+    # Save evaluation results
     with open(os.path.join(args.save_dir, "test_results.txt"), "w") as writer:
         for key, value in results.items():
             writer.write(f"{key}: {value}\n")
