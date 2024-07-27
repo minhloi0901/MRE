@@ -199,10 +199,12 @@ def main(args):
         )
         hf_iter = iter(hf_dataset)
         os.makedirs(os.path.join(args.root, "reals"), exist_ok=True)
-        for i in tqdm(range(1000, 1000 + args.num_samples), desc="Downloading real dataset"):
+        for _ in range(1000):
+            next(hf_iter)
+        for i in tqdm(range(args.num_samples), desc="Downloading real dataset"):
             r = next(hf_iter)
             os.makedirs(os.path.join(args.root, "reals"), exist_ok=True)
-            r["image"].save(os.path.join(args.root, "reals", f"{i}.png"))
+            r["image"].save(os.path.join(args.root, "reals", f"{i + 1000}.png"))
 
     if args.fake_dir:
         hf_dataset = load_dataset(
@@ -213,8 +215,9 @@ def main(args):
         )
         hf_iter = iter(hf_dataset)
         os.makedirs(os.path.join(args.root, "fakes"), exist_ok=True)
-
-        for i in tqdm(range(1000, 1000 + args.num_samples), desc="Downloading fake dataset"):
+        for _ in range(1000):
+            next(hf_iter)
+        for i in tqdm(range(args.num_samples), desc="Downloading fake dataset"):
             r = next(hf_iter)
             r["image"].save(os.path.join(args.root, "fakes", f"{i}.png"))
 
