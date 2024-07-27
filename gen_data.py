@@ -219,7 +219,7 @@ def main(args):
             next(hf_iter)
         for i in tqdm(range(args.num_samples), desc="Downloading fake dataset"):
             r = next(hf_iter)
-            r["image"].save(os.path.join(args.root, "fakes", f"{i}.png"))
+            r["image"].save(os.path.join(args.root, "fakes", f"{i + 1000}.png"))
 
     transform = transforms.Compose(
         [
