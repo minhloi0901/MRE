@@ -244,11 +244,11 @@ def main(args):
 
     if args.float16:
         pipeline = AutoPipelineForInpainting.from_pretrained(
-            args.diffuser, torch_dtype=torch.float16, variant="fp16"
+            args.diffuser, torch_dtype=torch.float16, variant="fp16", safety_checker=None
         ).to(args.device)
     else:
         pipeline = AutoPipelineForInpainting.from_pretrained(args.diffuser).to(
-            args.device
+            args.device, safety_checker=None
         )
 
     os.makedirs(args.save_dir, exist_ok=True)
