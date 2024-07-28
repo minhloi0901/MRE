@@ -53,6 +53,12 @@ def create_args():
         default=None,
         help="Path to fake dataset",
     )
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=0,
+        help="Starting index for downloading new images",
+    )
 
     parser.add_argument(
         "--image-size",
@@ -199,12 +205,11 @@ def main(args):
         )
         hf_iter = iter(hf_dataset)
         os.makedirs(os.path.join(args.root, "reals"), exist_ok=True)
-        for _ in range(1000):
-            next(hf_iter)
-        for i in tqdm(range(args.num_samples), desc="Downloading real dataset"):
+        
+        for i in tqdm(range(args.start_index, args.start_index + args.num_samples), desc="Downloading real dataset"):
             r = next(hf_iter)
             os.makedirs(os.path.join(args.root, "reals"), exist_ok=True)
-            r["image"].save(os.path.join(args.root, "reals", f"{i + 1000}.png"))
+            r["image"].save(os.path.join(args.root, "reals", f"{i}.png"))
 
     if args.fake_dir:
         hf_dataset = load_dataset(
@@ -215,11 +220,10 @@ def main(args):
         )
         hf_iter = iter(hf_dataset)
         os.makedirs(os.path.join(args.root, "fakes"), exist_ok=True)
-        for _ in range(1000):
-            next(hf_iter)
-        for i in tqdm(range(args.num_samples), desc="Downloading fake dataset"):
+      
+        for i in tqdm(range(args.start_index, args.start_index + args.num_samples), desc="Downloading fake dataset"):
             r = next(hf_iter)
-            r["image"].save(os.path.join(args.root, "fakes", f"{i + 1000}.png"))
+            r["image"].save(os.path.join(args.root, "fakes", f"{i}.png"))
 
     transform = transforms.Compose(
         [
@@ -248,7 +252,7 @@ def main(args):
         )
 
     os.makedirs(args.save_dir, exist_ok=True)
-    cnt = 0
+    cnt = args.start_index
     for images, labels in dataloader:
         images = images.to(args.device)
         mre_images = compute_MRE(
@@ -269,6 +273,7 @@ def main(args):
                 exist_ok=True,
             )
             pil_image = transforms.ToPILImage()(mre_images[i])
+            print('Saving MRE image')
             pil_image.save(os.path.join(label_dir, f"{cnt}.png"))
             cnt += 1
 
