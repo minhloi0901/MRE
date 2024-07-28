@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Artificial Image Detection
 
 ## Description
