@@ -68,6 +68,20 @@ def load_images(image_dir, label, size=(224, 224)):
             images.append({'image': image, 'label': label})
     return images
 
+class EpochSaverCallback(TrainerCallback):
+    def __init__(self, save_dir, save_interval):
+        self.save_dir = save_dir
+        self.save_interval = save_interval
+
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        epoch = state.epoch
+        if epoch is not None and epoch % self.save_interval == 0:
+            metrics_save_path = os.path.join(self.save_dir, f"metrics_epoch_{int(epoch)}.txt")
+            if metrics is not None:
+                with open(metrics_save_path, "w") as writer:
+                    for key, value in metrics.items():
+                        writer.write(f"{key}: {value}\n")
+
 def main(args):
     torch.manual_seed(args.seed)
     device = torch.device(args.device)
@@ -113,8 +127,9 @@ def main(args):
         load_best_model_at_end=True,  # Load the best model at the end
         evaluation_strategy="epoch",
         save_strategy="epoch",
-    )
+    )   
 
+    callbacks = [EpochSaverCallback(save_dir=args.save_dir, save_interval=5)]
     trainer = Trainer(
         model=model,
         args=training_args,

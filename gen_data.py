@@ -125,6 +125,7 @@ def compute_MRE(
     patch_size=(64, 64),
     seed: int = 0,
 ):
+
     N, C, W, H = init_images.size()
     image_size = (init_images.size(2), init_images.size(3))
     rng = torch.Generator(device).manual_seed(seed)
@@ -173,7 +174,6 @@ def compute_MRE(
     for k in range(num_masks):
         for b in range(N):
             mask = transforms.ToPILImage()(masks[k][b])
-            mask.show()
             blurred_masks[k][b] = transforms.ToTensor()(
                 pipeline.mask_processor.blur(mask, blur_factor=blur_factor)
             ).to(device)
@@ -182,7 +182,7 @@ def compute_MRE(
    # save initial images
     for i in range(len(images)):
         pil_image = transforms.ToPILImage()(images[i])
-        pil_image.save(f"{i}-init.png")
+        pil_image.save(f"initial\{i}-init.png")
     for id, mask in enumerate(blurred_masks):
         tmp = pipeline(
             prompt=["" for _ in range(N)],
@@ -195,7 +195,7 @@ def compute_MRE(
         # save current images with blurred mask
         for i in range(len(images)):
             pil_image = transforms.ToPILImage()(images[i])
-            pil_image.save(f"{i}-{id}.png")
+            pil_image.save(f"patches\{i}-{id}.png")
 
     return torch.abs(images - init_images)
 
