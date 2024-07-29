@@ -184,7 +184,7 @@ def compute_MRE(
     os.makedirs("patches", exist_ok=True)
     for i in range(len(images)):
         pil_image = transforms.ToPILImage()(images[i])
-        pil_image.save(f"initial\{i}-init.png")
+        pil_image.save(os.path.join("initial", f"{i}-init.png"))
     for id, mask in enumerate(blurred_masks):
         tmp = pipeline(
             prompt=["" for _ in range(N)],
@@ -197,8 +197,8 @@ def compute_MRE(
         # save current images with blurred mask
         for i in range(len(images)):
             pil_image = transforms.ToPILImage()(images[i])
-            pil_image.save(f"patches\{i}-{id}.png")
-            transforms.ToPILImage()(mask[i]).save(f"patches\{i}-{id}-mask.png")
+            pil_image.save(os.path.join("patches"), f"\{i}-{id}.png")
+            transforms.ToPILImage()(mask[i]).save(os.path.join("patches", f"{i}-{id}-mask.png"))
 
     return torch.abs(images - init_images)
 
