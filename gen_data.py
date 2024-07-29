@@ -178,7 +178,11 @@ def compute_MRE(
             ).to(device)
 
     images = init_images.clone()
-    for mask in blurred_masks:
+   # save initial images
+    for i in range(len(images)):
+        pil_image = transforms.ToPILImage()(images[i])
+        pil_image.save(f"{i}-init.png")
+    for id, mask in enumerate(blurred_masks):
         tmp = pipeline(
             prompt=["" for _ in range(N)],
             image=images,
@@ -187,9 +191,12 @@ def compute_MRE(
         ).images
         for i in range(len(tmp)):
             images[i] = transforms.ToTensor()(tmp[i])
+        # save current images with blurred mask
+        for i in range(len(images)):
+            pil_image = transforms.ToPILImage()(images[i])
+            pil_image.save(f"{i}-{id}.png")
 
     return torch.abs(images - init_images)
-
 
 def main(args):
     if args.hf_token:
