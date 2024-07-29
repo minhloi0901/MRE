@@ -179,7 +179,9 @@ def compute_MRE(
             ).to(device)
 
     images = init_images.clone()
-   # save initial images
+    # save initial images
+    os.makedirs("initial", exist_ok=True)
+    os.makedirs("patches", exist_ok=True)
     for i in range(len(images)):
         pil_image = transforms.ToPILImage()(images[i])
         pil_image.save(f"initial\{i}-init.png")
@@ -196,6 +198,7 @@ def compute_MRE(
         for i in range(len(images)):
             pil_image = transforms.ToPILImage()(images[i])
             pil_image.save(f"patches\{i}-{id}.png")
+            transforms.ToPILImage()(mask[i]).save(f"patches\{i}-{id}-mask.png")
 
     return torch.abs(images - init_images)
 
