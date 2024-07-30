@@ -118,6 +118,7 @@ def create_args():
 
 def compute_MRE(
     pipeline,
+    cnt: int,
     init_images: torch.Tensor,
     device: torch.device,
     num_masks: int,
@@ -179,27 +180,33 @@ def compute_MRE(
             ).to(device)
 
     images = init_images.clone()
-    # save initial images
-    os.makedirs("initial", exist_ok=True)
-    os.makedirs("patches", exist_ok=True)
-    for i in range(len(images)):
-        pil_image = transforms.ToPILImage()(images[i])
-        pil_image.save(os.path.join("initial", f"{i}-init.png"))
+
+    patch_dir = os.path.join(args.save_dir, "patches")
+    image_dir = os.path.join(args.save_dir, "images")
+    os.makedirs(patch_dir, exist_ok=True)
+    os.makedirs(image_dir, exist_ok=True)
+
     for id, mask in enumerate(blurred_masks):
+        # save current mask
+        pil_mask = transforms.ToPILImage()(mask[id])
+        print('Saving mask' + str(id))
+        pil_mask.save(os.path.join(patch_dir, f"{id}.png"))
+
         tmp = pipeline(
             prompt=["" for _ in range(N)],
             image=images,
             mask_image=mask,
             generator=rng,
         ).images
+        # 
         for i in range(len(tmp)):
             images[i] = transforms.ToTensor()(tmp[i])
+        
         # save current images with blurred mask
         for i in range(len(images)):
             pil_image = transforms.ToPILImage()(images[i])
-            pil_image.save(os.path.join("patches"), f"\{i}-{id}.png")
-            transforms.ToPILImage()(mask[i]).save(os.path.join("patches", f"{i}-{id}-mask.png"))
-
+            print('Saving mask' + str(id) + ' image' + str(cnt + i))
+            pil_image.save(os.path.join(image_dir, f"{cnt + i}_{id}.png"))
     return torch.abs(images - init_images)
 
 def main(args):
@@ -268,6 +275,7 @@ def main(args):
         images = images.to(args.device)
         mre_images = compute_MRE(
             pipeline=pipeline,
+            cnt=cnt,
             init_images=images,
             device=args.device,
             num_masks=args.num_masks,
@@ -284,7 +292,6 @@ def main(args):
                 exist_ok=True,
             )
             pil_image = transforms.ToPILImage()(mre_images[i])
-            print('Saving MRE image')
             pil_image.save(os.path.join(label_dir, f"{cnt}.png"))
             cnt += 1
 
