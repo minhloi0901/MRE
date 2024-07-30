@@ -204,7 +204,7 @@ def compute_MRE(
         
         # save current images with blurred mask
         for i in range(len(images)):
-            pil_image = transforms.ToPILImage()(images[i])
+            pil_image = transforms.ToPILImage()(tmp[i])
             print('Saving mask' + str(id) + ' image' + str(cnt + i))
             pil_image.save(os.path.join(image_dir, f"{cnt + i}_{id}.png"))
     return torch.abs(images - init_images)
